@@ -18,6 +18,7 @@
  */
 package org.apache.iceberg.gcp.gcs;
 
+import com.google.api.client.http.apache.v2.ApacheHttpTransport;
 import com.google.api.gax.rpc.FixedHeaderProvider;
 import com.google.auth.Credentials;
 import com.google.auth.oauth2.GoogleCredentials;
@@ -27,11 +28,15 @@ import com.google.cloud.gcs.analyticscore.client.GcsFileSystem;
 import com.google.cloud.gcs.analyticscore.client.GcsFileSystemImpl;
 import com.google.cloud.gcs.analyticscore.client.GcsFileSystemOptions;
 import com.google.cloud.gcs.analyticscore.core.GcsAnalyticsCoreOptions;
+import com.google.cloud.http.HttpTransportOptions;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.Map;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.apache.iceberg.EnvironmentContext;
 import org.apache.iceberg.gcp.GCPAuthUtils;
 import org.apache.iceberg.gcp.GCPProperties;
@@ -72,7 +77,7 @@ class PrefixedStorage implements AutoCloseable {
             gcpProperties.projectId().ifPresent(builder::setProjectId);
             gcpProperties.clientLibToken().ifPresent(builder::setClientLibToken);
             gcpProperties.serviceHost().ifPresent(builder::setHost);
-
+            updateHttpTransportOptions(builder, gcpProperties);
             Credentials credentials = credentials(gcpProperties);
             if (credentials != null) {
               builder.setCredentials(credentials);
@@ -83,6 +88,48 @@ class PrefixedStorage implements AutoCloseable {
     }
 
     this.gcsFileSystemSupplier = gcsFileSystemSupplier(properties);
+  }
+
+  /**
+   * Update the StorageOptions builder with HTTP transport options from GCP properties, if
+   * specified.
+   */
+  private void updateHttpTransportOptions(
+      StorageOptions.Builder builder, GCPProperties properties) {
+    HttpTransportOptions.Builder httpBuilder = HttpTransportOptions.newBuilder();
+    properties.getConnectionTimeoutMillis().ifPresent(httpBuilder::setConnectTimeout);
+    properties.getReadTimeoutMillis().ifPresent(httpBuilder::setReadTimeout);
+    properties
+        .getMaxConnections()
+        .ifPresent(
+            maxConnections -> {
+              updateConnectionManagerSettings(properties, maxConnections, httpBuilder);
+            });
+    builder.setTransportOptions(httpBuilder.build());
+  }
+
+  /**
+   * Update the HTTP transport settings to use a connection manager with the specified max
+   * connections, and apply any connection/request timeout settings from GCP properties.
+   */
+  private void updateConnectionManagerSettings(
+      GCPProperties properties, Integer maxConnections, HttpTransportOptions.Builder httpBuilder) {
+    RequestConfig.Builder requestConfig = RequestConfig.custom();
+    properties.getConnectionTimeoutMillis().ifPresent(requestConfig::setConnectionRequestTimeout);
+    properties.getReadTimeoutMillis().ifPresent(requestConfig::setSocketTimeout);
+    PoolingHttpClientConnectionManager poolingHttpClientConnectionManager =
+        new PoolingHttpClientConnectionManager();
+    poolingHttpClientConnectionManager.setMaxTotal(maxConnections);
+    // Do we have to set this?
+    poolingHttpClientConnectionManager.setDefaultMaxPerRoute(maxConnections);
+    httpBuilder.setHttpTransportFactory(
+        () ->
+            new ApacheHttpTransport(
+                HttpClients.custom()
+                    .setConnectionManager(poolingHttpClientConnectionManager)
+                    .setDefaultRequestConfig(requestConfig.build())
+                    .build()));
+    this.closeableGroup.addCloseable(poolingHttpClientConnectionManager);
   }
 
   public String storagePrefix() {

@@ -77,4 +77,31 @@ public class TestGCPProperties {
         .get()
         .isEqualTo("/v1/credentials");
   }
+
+  @Test
+  public void testHttpTransportOptionsUnset() {
+    GCPProperties emptyProps = new GCPProperties();
+    assertThat(emptyProps.getConnectionTimeoutMillis())
+        .describedAs("Connection timeout should not be set when the property is not provided")
+        .isNotPresent();
+    assertThat(emptyProps.getReadTimeoutMillis())
+        .describedAs("Read timeout should not be set when the property is not provided")
+        .isNotPresent();
+    assertThat(emptyProps.getConnectionTimeoutMillis())
+        .describedAs("Connection timeout should not be set when the property is not provided")
+        .isNotPresent();
+  }
+
+  @Test
+  public void testHttpTransportOptionsSet() {
+    GCPProperties gcpProperties =
+        new GCPProperties(
+            ImmutableMap.of(
+                GCPProperties.GCS_CONNECTION_TIMEOUT_MILLIS, "1000",
+                GCPProperties.GCS_READ_TIMEOUT_MILLIS, "2000",
+                GCPProperties.GCS_MAX_CONNECTIONS, "100"));
+    assertThat(gcpProperties.getConnectionTimeoutMillis()).isPresent().get().isEqualTo(1000);
+    assertThat(gcpProperties.getReadTimeoutMillis()).isPresent().get().isEqualTo(2000);
+    assertThat(gcpProperties.getMaxConnections()).isPresent().get().isEqualTo(100);
+  }
 }

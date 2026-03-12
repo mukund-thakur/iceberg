@@ -73,6 +73,15 @@ public class GCPProperties implements Serializable {
   /** Controls whether analytics core library is enabled or not. Defaults to false. */
   public static final String GCS_ANALYTICS_CORE_ENABLED = "gcs.analytics-core.enabled";
 
+  /** Optional configuration for connection timeout in milliseconds for GCS client. */
+  public static final String GCS_CONNECTION_TIMEOUT_MILLIS = "gcs.connection.timeout-millis";
+
+  /** Optional configuration for read timeout in milliseconds for GCS client. */
+  public static final String GCS_READ_TIMEOUT_MILLIS = "gcs.read.timeout-millis";
+
+  /** Optional configuration for max connections for GCS client. */
+  public static final String GCS_MAX_CONNECTIONS = "gcs.connection.max-connections";
+
   /**
    * Max possible batch size for deletion. Currently, a max of 100 keys is advised, so we default to
    * a number below that. https://cloud.google.com/storage/docs/batch
@@ -103,6 +112,12 @@ public class GCPProperties implements Serializable {
   private int gcsImpersonateLifetimeSeconds;
   private List<String> gcsImpersonateDelegates;
   private List<String> gcsImpersonateScopes;
+
+  private Integer connectionTimeoutMillis;
+
+  private Integer readTimeoutMillis;
+
+  private Integer maxConnections;
 
   private int gcsDeleteBatchSize = GCS_DELETE_BATCH_SIZE_DEFAULT;
 
@@ -197,6 +212,17 @@ public class GCPProperties implements Serializable {
 
     gcsAnalyticsCoreEnabled =
         PropertyUtil.propertyAsBoolean(properties, GCS_ANALYTICS_CORE_ENABLED, false);
+    if (properties.containsKey(GCS_CONNECTION_TIMEOUT_MILLIS)) {
+      connectionTimeoutMillis = Integer.parseInt(properties.get("gcs.connection.timeout-millis"));
+    }
+
+    if (properties.containsKey(GCS_MAX_CONNECTIONS)) {
+      maxConnections = Integer.parseInt(properties.get("gcs.connection.max-connections"));
+    }
+
+    if (properties.containsKey(GCS_READ_TIMEOUT_MILLIS)) {
+      readTimeoutMillis = Integer.parseInt(properties.get("gcs.read.timeout-millis"));
+    }
   }
 
   public Optional<Integer> channelReadChunkSize() {
@@ -277,5 +303,17 @@ public class GCPProperties implements Serializable {
 
   public boolean isGcsAnalyticsCoreEnabled() {
     return gcsAnalyticsCoreEnabled;
+  }
+
+  public Optional<Integer> getReadTimeoutMillis() {
+    return Optional.ofNullable(readTimeoutMillis);
+  }
+
+  public Optional<Integer> getMaxConnections() {
+    return Optional.ofNullable(maxConnections);
+  }
+
+  public Optional<Integer> getConnectionTimeoutMillis() {
+    return Optional.ofNullable(connectionTimeoutMillis);
   }
 }

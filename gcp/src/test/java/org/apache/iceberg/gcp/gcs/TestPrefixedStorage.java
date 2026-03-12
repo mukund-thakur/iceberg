@@ -21,10 +21,14 @@ package org.apache.iceberg.gcp.gcs;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.google.api.client.http.apache.v2.ApacheHttpTransport;
+import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.cloud.gcs.analyticscore.client.GcsClientOptions;
 import com.google.cloud.gcs.analyticscore.client.GcsFileSystem;
 import com.google.cloud.gcs.analyticscore.client.GcsFileSystemOptions;
 import com.google.cloud.gcs.analyticscore.client.GcsReadOptions;
+import com.google.cloud.http.HttpTransportOptions;
+import com.google.cloud.storage.StorageOptions;
 import java.util.Map;
 import org.apache.iceberg.EnvironmentContext;
 import org.apache.iceberg.gcp.GCPProperties;
@@ -78,12 +82,16 @@ public class TestPrefixedStorage {
   public void impersonationPropertiesAreRead() {
     Map<String, String> properties =
         ImmutableMap.of(
-            GCPProperties.GCS_PROJECT_ID, "myProject",
+            GCPProperties.GCS_PROJECT_ID,
+            "myProject",
             GCPProperties.GCS_IMPERSONATE_SERVICE_ACCOUNT,
-                "test-sa@project.iam.gserviceaccount.com",
-            GCPProperties.GCS_IMPERSONATE_DELEGATES, "delegate-sa@project.iam.gserviceaccount.com",
-            GCPProperties.GCS_IMPERSONATE_LIFETIME_SECONDS, "1800",
-            GCPProperties.GCS_IMPERSONATE_SCOPES, "bigquery,devstorage.read_only");
+            "test-sa@project.iam.gserviceaccount.com",
+            GCPProperties.GCS_IMPERSONATE_DELEGATES,
+            "delegate-sa@project.iam.gserviceaccount.com",
+            GCPProperties.GCS_IMPERSONATE_LIFETIME_SECONDS,
+            "1800",
+            GCPProperties.GCS_IMPERSONATE_SCOPES,
+            "bigquery,devstorage.read_only");
 
     GCPProperties gcpProperties = new GCPProperties(properties);
 
@@ -102,9 +110,10 @@ public class TestPrefixedStorage {
   public void impersonationPropertiesWithDefaults() {
     Map<String, String> properties =
         ImmutableMap.of(
-            GCPProperties.GCS_PROJECT_ID, "myProject",
+            GCPProperties.GCS_PROJECT_ID,
+            "myProject",
             GCPProperties.GCS_IMPERSONATE_SERVICE_ACCOUNT,
-                "test-sa@project.iam.gserviceaccount.com");
+            "test-sa@project.iam.gserviceaccount.com");
 
     GCPProperties gcpProperties = new GCPProperties(properties);
 
@@ -149,5 +158,57 @@ public class TestPrefixedStorage {
     assertThat(fileSystem).isNotNull();
     assertThat(fileSystem.getGcsClient()).isNotNull();
     assertThat(fileSystem.getFileSystemOptions()).isEqualTo(expectedOptions);
+  }
+
+  @Test
+  public void testDefaultHttpTransportClass() {
+    Map<String, String> properties = ImmutableMap.of(GCPProperties.GCS_PROJECT_ID, "myProject");
+    PrefixedStorage storage = new PrefixedStorage("gs://bucket", properties, null);
+    StorageOptions options = storage.storage().getOptions();
+    HttpTransportOptions httpOptions = (HttpTransportOptions) options.getTransportOptions();
+    assertThat(httpOptions.getHttpTransportFactory().create())
+        .describedAs("Default HTTP transport should be NetHttpTransport")
+        .isInstanceOf(NetHttpTransport.class);
+  }
+
+  @Test
+  public void testHttpTransportOptions() {
+    Map<String, String> properties =
+        ImmutableMap.of(
+            GCPProperties.GCS_PROJECT_ID, "myProject",
+            GCPProperties.GCS_CONNECTION_TIMEOUT_MILLIS, "1000",
+            GCPProperties.GCS_READ_TIMEOUT_MILLIS, "2000");
+    PrefixedStorage storage = new PrefixedStorage("gs://bucket", properties, null);
+    StorageOptions options = storage.storage().getOptions();
+    assertThat(options.getTransportOptions()).isInstanceOf(HttpTransportOptions.class);
+    HttpTransportOptions httpOptions = (HttpTransportOptions) options.getTransportOptions();
+    assertThat(httpOptions.getHttpTransportFactory().create())
+        .describedAs(
+            "HTTP transport should be NetHttpTransport when connection or read timeout is set")
+        .isInstanceOf(NetHttpTransport.class);
+    assertThat(httpOptions.getConnectTimeout())
+        .describedAs("Connection timeout should be set from properties")
+        .isEqualTo(1000);
+    assertThat(httpOptions.getReadTimeout())
+        .describedAs("Read timeout should be set from properties")
+        .isEqualTo(2000);
+  }
+
+  @Test
+  public void testMaxConnections() {
+    Map<String, String> properties =
+        ImmutableMap.of(
+            GCPProperties.GCS_PROJECT_ID, "myProject",
+            GCPProperties.GCS_CONNECTION_TIMEOUT_MILLIS, "10000",
+            GCPProperties.GCS_READ_TIMEOUT_MILLIS, "30000",
+            GCPProperties.GCS_MAX_CONNECTIONS, "10");
+    PrefixedStorage storage = new PrefixedStorage("gs://bucket", properties, null);
+    StorageOptions options = storage.storage().getOptions();
+    assertThat(options.getTransportOptions()).isInstanceOf(HttpTransportOptions.class);
+    HttpTransportOptions httpOptions = (HttpTransportOptions) options.getTransportOptions();
+    assertThat(httpOptions.getHttpTransportFactory().create())
+        .describedAs("HTTP transport should be ApacheHttpTransport when max connections is set")
+        .isInstanceOf(ApacheHttpTransport.class);
+    // Figuring out if we can match the value max connection.
   }
 }
