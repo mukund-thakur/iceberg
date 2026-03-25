@@ -1182,6 +1182,54 @@ public class TestSchemaUpdate {
   }
 
   @Test
+  public void testDeleteMapFields() {
+    // We can delete the full map field.
+    Schema del = new SchemaUpdate(SCHEMA, SCHEMA_LAST_COLUMN_ID).deleteColumn("locations").apply();
+    // make sense that you can't delete the full key of the map.
+    assertThatThrownBy(
+            () ->
+                new SchemaUpdate(SCHEMA, SCHEMA_LAST_COLUMN_ID)
+                    .deleteColumn("locations.key")
+                    .apply())
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageStartingWith("Cannot delete map keys");
+
+    // make sense that you can't drop the full value of the map.
+    assertThatThrownBy(
+            () ->
+                new SchemaUpdate(SCHEMA, SCHEMA_LAST_COLUMN_ID)
+                    .deleteColumn("locations.value")
+                    .apply())
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageStartingWith("Cannot delete value type from map");
+
+    // deleting the value succeeds.
+    Schema del1 =
+        new SchemaUpdate(SCHEMA, SCHEMA_LAST_COLUMN_ID).deleteColumn("locations.value.lat").apply();
+
+    // deleting nested part of key fails with below exception.
+    // Cannot alter map keys: map<struct<20: address: required string, 21: city: required string,
+    // 22: state: required string, 23: zip: required int>, struct<12: lat: required float, 13: long:
+    // required float>>
+    // java.lang.IllegalArgumentException: Cannot alter map keys: map<struct<20: address: required
+    // string, 21: city: required string, 22: state: required string, 23: zip: required int>,
+    // struct<12: lat: required float, 13: long: required float>>
+    //	at org.apache.iceberg.SchemaUpdate$ApplyChanges.map(SchemaUpdate.java:723)
+    //	at org.apache.iceberg.SchemaUpdate$ApplyChanges.map(SchemaUpdate.java:589)
+    //	at org.apache.iceberg.types.TypeUtil.visit(TypeUtil.java:786)
+    //	at org.apache.iceberg.types.TypeUtil.visit(TypeUtil.java:743)
+    //	at org.apache.iceberg.types.TypeUtil.visit(TypeUtil.java:731)
+    //	at org.apache.iceberg.SchemaUpdate.applyChanges(SchemaUpdate.java:566)
+    //	at org.apache.iceberg.SchemaUpdate.apply(SchemaUpdate.java:467)
+    //	at org.apache.iceberg.SchemaUpdate.apply(SchemaUpdate.java:50)
+    // I think it should succeed if deleting nested part of value "locations.lat" is allowed.
+    Schema del11 =
+        new SchemaUpdate(SCHEMA, SCHEMA_LAST_COLUMN_ID)
+            .deleteColumn("locations.key.address")
+            .apply();
+  }
+
+  @Test
   public void testAddFieldToMapKey() {
     assertThatThrownBy(
             () ->
