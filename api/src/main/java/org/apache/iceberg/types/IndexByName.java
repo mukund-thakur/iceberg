@@ -117,12 +117,22 @@ public class IndexByName extends TypeUtil.SchemaVisitor<Map<String, Integer>> {
 
   @Override
   public void beforeMapKey(Types.NestedField keyField) {
-    beforeField(keyField);
+    fieldNames.push(keyField.name());
+
+    // only add "key" to the name if the key is not a struct, so that names are more natural
+    if (!keyField.type().isStructType()) {
+      shortFieldNames.push(keyField.name());
+    }
   }
 
   @Override
   public void afterMapKey(Types.NestedField keyField) {
-    afterField(keyField);
+    fieldNames.pop();
+
+    // only remove "key" if it was added
+    if (!keyField.type().isStructType()) {
+      shortFieldNames.pop();
+    }
   }
 
   @Override
