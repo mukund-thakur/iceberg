@@ -1185,11 +1185,11 @@ public class TestSchemaUpdate {
   public void testDeleteMapValue() {
     assertThatThrownBy(
             () ->
-                    new SchemaUpdate(SCHEMA, SCHEMA_LAST_COLUMN_ID)
-                            .deleteColumn("locations.value")
-                            .apply())
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageStartingWith("Cannot delete value type from map");
+                new SchemaUpdate(SCHEMA, SCHEMA_LAST_COLUMN_ID)
+                    .deleteColumn("locations.value")
+                    .apply())
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageStartingWith("Cannot delete value type from map");
   }
 
   @Test
