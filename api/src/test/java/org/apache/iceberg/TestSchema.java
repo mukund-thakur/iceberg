@@ -21,6 +21,8 @@ package org.apache.iceberg;
 import static org.apache.iceberg.Schema.DEFAULT_VALUES_MIN_FORMAT_VERSION;
 import static org.apache.iceberg.Schema.MIN_FORMAT_VERSIONS;
 import static org.apache.iceberg.TestHelpers.MAX_FORMAT_VERSION;
+import static org.apache.iceberg.types.Types.NestedField.optional;
+import static org.apache.iceberg.types.Types.NestedField.required;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -311,5 +313,98 @@ public class TestSchema {
     assertThat(fields.get(4).name()).isEqualTo("age");
     assertThat(fields.get(5).name()).isEqualTo("email");
     assertThat(((Types.StructType) fields.get(2).type()).fields()).hasSize(3);
+  }
+
+  @Test
+  void testFindFieldInMap() {
+    Schema schema =
+        new Schema(
+            required(1, "id", Types.IntegerType.get()),
+            optional(2, "data", Types.StringType.get()),
+            required(
+                4,
+                "locations",
+                Types.MapType.ofRequired(
+                    10,
+                    11,
+                    Types.StructType.of(
+                        required(20, "address", Types.StringType.get()),
+                        required(21, "city", Types.StringType.get()),
+                        required(22, "state", Types.StringType.get()),
+                        required(23, "zip", Types.IntegerType.get())),
+                    Types.StructType.of(
+                        required(12, "lat", Types.FloatType.get()),
+                        required(13, "long", Types.FloatType.get()))),
+                "map of address to coordinate"),
+            optional(
+                7,
+                "properties",
+                Types.MapType.ofOptional(18, 19, Types.StringType.get(), Types.StringType.get()),
+                "string map of properties"));
+
+    // canonical paths — key and value container fields
+    assertThat(schema.findField("locations.key"))
+        .isNotNull()
+        .extracting(Types.NestedField::fieldId)
+        .isEqualTo(10);
+    assertThat(schema.findField("locations.value"))
+        .isNotNull()
+        .extracting(Types.NestedField::fieldId)
+        .isEqualTo(11);
+
+    // canonical paths — key struct sub-fields
+    assertThat(schema.findField("locations.key.address"))
+        .isNotNull()
+        .extracting(Types.NestedField::fieldId)
+        .isEqualTo(20);
+    assertThat(schema.findField("locations.key.zip"))
+        .isNotNull()
+        .extracting(Types.NestedField::fieldId)
+        .isEqualTo(23);
+
+    // canonical paths — value struct sub-fields
+    assertThat(schema.findField("locations.value.lat"))
+        .isNotNull()
+        .extracting(Types.NestedField::fieldId)
+        .isEqualTo(12);
+    assertThat(schema.findField("locations.value.long"))
+        .isNotNull()
+        .extracting(Types.NestedField::fieldId)
+        .isEqualTo(13);
+
+    // short names — "value" dropped for struct value fields
+    assertThat(schema.findField("locations.lat"))
+        .isNotNull()
+        .extracting(Types.NestedField::fieldId)
+        .isEqualTo(12);
+    assertThat(schema.findField("locations.long"))
+        .isNotNull()
+        .extracting(Types.NestedField::fieldId)
+        .isEqualTo(13);
+
+    // short names — "key" dropped for struct key fields
+    assertThat(schema.findField("locations.address"))
+        .isNotNull()
+        .extracting(Types.NestedField::fieldId)
+        .isEqualTo(20);
+    assertThat(schema.findField("locations.zip"))
+        .isNotNull()
+        .extracting(Types.NestedField::fieldId)
+        .isEqualTo(23);
+
+    // primitive key/value map — no short names, only canonical paths
+    assertThat(schema.findField("properties.key"))
+        .isNotNull()
+        .extracting(Types.NestedField::fieldId)
+        .isEqualTo(18);
+    assertThat(schema.findField("properties.value"))
+        .isNotNull()
+        .extracting(Types.NestedField::fieldId)
+        .isEqualTo(19);
+
+    // non-existent paths return null
+    assertThat(schema.findField("locations.unknown")).isNull();
+    assertThat(schema.findField("locations.key.unknown")).isNull();
+    assertThat(schema.findField("locations.value.unknown")).isNull();
   }
 }
