@@ -18,7 +18,6 @@
  */
 package org.apache.iceberg.parquet;
 
-import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -181,24 +180,22 @@ class ParquetIO {
       delegate.readVectored(delegateRange, allocate::allocate);
     }
 
+    /**
+     * convert parquet file ranges to iceberg file range.
+     *
+     * @param ranges input parquet file range.
+     * @return iceberg file range list.
+     */
     private static List<FileRange> convertRanges(List<ParquetFileRange> ranges) {
       return ranges.stream()
           .map(
               parquetFileRange -> {
                 CompletableFuture<ByteBuffer> future = new CompletableFuture<>();
                 parquetFileRange.setDataReadFuture(future);
-                try {
-                  return new FileRange(
-                      parquetFileRange.getDataReadFuture(),
-                      parquetFileRange.getOffset(),
-                      parquetFileRange.getLength());
-                } catch (EOFException e) {
-                  throw new RuntimeIOException(
-                      e,
-                      "Failed to create range file for offset: %s and length: %s",
-                      parquetFileRange.getOffset(),
-                      parquetFileRange.getLength());
-                }
+                return new FileRange(
+                    parquetFileRange.getDataReadFuture(),
+                    parquetFileRange.getOffset(),
+                    parquetFileRange.getLength());
               })
           .collect(Collectors.toList());
     }
